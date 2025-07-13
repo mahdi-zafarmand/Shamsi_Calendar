@@ -2,6 +2,7 @@
 
 import datetime
 import sys
+import argparse # Import the argparse module for command-line argument parsing
 
 # ANSI escape codes for text formatting
 # These codes are used for coloring and background in the terminal.
@@ -196,36 +197,75 @@ if __name__ == "__main__":
         current_g_date.year, current_g_date.month, current_g_date.day
     )
 
-    target_year = current_shamsi_year
-    target_month = current_shamsi_month
-    day_to_highlight = None
+    # Set up argument parser
+    parser = argparse.ArgumentParser(
+        description="Display Shamsi calendar or convert dates.",
+        formatter_class=argparse.RawTextHelpFormatter # For better formatting of help message
+    )
 
-    # Parse command-line arguments
-    if len(sys.argv) == 2:
+    # Mutually exclusive group for conversion options
+    conversion_group = parser.add_mutually_exclusive_group()
+    conversion_group.add_argument(
+        "-g", "--gregorian",
+        help="Convert a Gregorian date (YYYY-MM-DD) to Shamsi.",
+        metavar="DATE"
+    )
+    conversion_group.add_argument(
+        "-s", "--shamsi",
+        help="Convert a Shamsi date (YYYY-MM-DD) to Gregorian.",
+        metavar="DATE"
+    )
+
+    # Positional arguments for calendar display
+    parser.add_argument(
+        "month",
+        nargs="?", # 0 or 1 argument
+        type=int,
+        help="Shamsi month (1-12). If only year is provided, displays all months of that year."
+    )
+    parser.add_argument(
+        "year",
+        nargs="?", # 0 or 1 argument
+        type=int,
+        help="Shamsi year."
+    )
+
+    args = parser.parse_args()
+
+    # Handle conversion requests
+    if args.gregorian:
         try:
-            target_year = int(sys.argv[1])
-            for m in range(1, 13):
-                if target_year == current_shamsi_year and m == current_shamsi_month:
-                    print_shamsi_calendar(target_year, m, current_shamsi_day)
-                else:
-                    print_shamsi_calendar(target_year, m)
-            sys.exit(0)
-        except ValueError:
-            print("Usage: scal [month] [year]")
-            print("       scal [year]")
-            print("       scal (for current month)")
-            sys.exit(1)
-    elif len(sys.argv) == 3:
+            g_year, g_month, g_day = map(int, args.gregorian.split('-'))
+            if not (1 <= g_month <= 12 and 1 <= g_day <= 31): # Basic validation
+                raise ValueError("Invalid month or day in Gregorian date.")
+            shamsi_y, shamsi_m, shamsi_d = gregorian_to_shamsi(g_year, g_month, g_day)
+            print(f"Gregorian {args.gregorian} is Shamsi {shamsi_y}-{shamsi_m:02d}-{shamsi_d:02d}")
+        except ValueError as e:
+            print(f"Error: Invalid Gregorian date format or value. Please use YYYY-MM-DD. ({e})")
+        sys.exit(0)
+
+    if args.shamsi:
         try:
-            target_month = int(sys.argv[1])
-            target_year = int(sys.argv[2])
-            if not (1 <= target_month <= 12):
+            s_year, s_month, s_day = map(int, args.shamsi.split('-'))
+            if not (1 <= s_month <= 12 and 1 <= s_day <= 31): # Basic validation
+                raise ValueError("Invalid month or day in Shamsi date.")
+            gregorian_y, gregorian_m, gregorian_d = shamsi_to_gregorian(s_year, s_month, s_day)
+            print(f"Shamsi {args.shamsi} is Gregorian {gregorian_y}-{gregorian_m:02d}-{gregorian_d:02d}")
+        except ValueError as e:
+            print(f"Error: Invalid Shamsi date format or value. Please use YYYY-MM-DD. ({e})")
+        sys.exit(0)
+
+    # Handle calendar display requests (original functionality)
+    if args.month is not None and args.year is not None:
+        try:
+            if not (1 <= args.month <= 12):
                 raise ValueError("Month must be between 1 and 12.")
             
-            if target_year == current_shamsi_year and target_month == current_shamsi_month:
+            day_to_highlight = None
+            if args.year == current_shamsi_year and args.month == current_shamsi_month:
                 day_to_highlight = current_shamsi_day
             
-            print_shamsi_calendar(target_year, target_month, day_to_highlight)
+            print_shamsi_calendar(args.year, args.month, day_to_highlight)
             sys.exit(0)
         except ValueError as e:
             print(f"Error: {e}")
@@ -233,12 +273,26 @@ if __name__ == "__main__":
             print("       scal [year]")
             print("       scal (for current month)")
             sys.exit(1)
-    elif len(sys.argv) == 1:
-        print_shamsi_calendar(target_year, target_month, current_shamsi_day)
+    elif args.month is not None and args.year is None: # Only year provided (as the 'month' argument)
+        try:
+            target_year = args.month # The first positional argument is interpreted as the year
+            for m in range(1, 13):
+                if target_year == current_shamsi_year and m == current_shamsi_month:
+                    print_shamsi_calendar(target_year, m, current_shamsi_day)
+                else:
+                    print_shamsi_calendar(target_year, m)
+            sys.exit(0)
+        except ValueError: # Should ideally not happen if type=int is used, but good for robustness
+            print("Usage: scal [month] [year]")
+            print("       scal [year]")
+            print("       scal (for current month)")
+            sys.exit(1)
+    elif args.month is None and args.year is None:
+        # No arguments, show current month and highlight current day
+        print_shamsi_calendar(current_shamsi_year, current_shamsi_month, current_shamsi_day)
         sys.exit(0)
     else:
-        print("Usage: scal [month] [year]")
-        print("       scal [year]")
-        print("       scal (for current month)")
+        # This case should ideally be caught by argparse itself, but as a fallback
+        parser.print_help()
         sys.exit(1)
 
